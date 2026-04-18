@@ -1,0 +1,29 @@
+{
+  "name": "ZEN5 — Kit de Emergência Emocional",
+  "short_name": "ZEN5",
+  "description": "Acalme sua mente em 5 minutos. Funciona offline.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#130A06",
+  "theme_color": "#130A06",
+  "lang": "pt-BR",
+  "categories": ["health", "lifestyle", "medical"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%23130A06'/%3E%3Ccircle cx='96' cy='76' r='38' fill='none' stroke='%23E8A85F' stroke-width='2'/%3E%3Ccircle cx='96' cy='76' r='22' fill='none' stroke='%23E8A85F' stroke-width='1.5'/%3E%3Ccircle cx='96' cy='76' r='8' fill='%23E8A85F'/%3E%3Ctext x='96' y='140' font-family='Georgia,serif' font-size='28' font-style='italic' fill='%23F5EDD8' text-anchor='middle'%3Ezen5%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%23130A06'/%3E%3Ccircle cx='256' cy='210' r='100' fill='none' stroke='%23E8A85F' stroke-width='4'/%3E%3Ccircle cx='256' cy='210' r='60' fill='none' stroke='%23E8A85F' stroke-width='3'/%3E%3Ccircle cx='256' cy='210' r='22' fill='%23E8A85F'/%3E%3Ctext x='256' y='380' font-family='Georgia,serif' font-size='72' font-style='italic' fill='%23F5EDD8' text-anchor='middle'%3Ezen5%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

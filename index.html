@@ -4,8 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ZEN5 — Kit de Emergência Emocional</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<!-- CORREÇÃO 1: Fontes do sistema — zero download externo, zero bloqueio de renderização -->
+<!-- CORREÇÃO 2: PWA — manifest + theme color para instalação na tela inicial -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#130A06">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ZEN5">
+<meta name="description" content="Kit de Emergência Emocional — acalme sua mente em 5 minutos">
 <style>
 /* ═══════════════════════════════════════════
    PSICOLOGIA DAS CORES — ZEN5 v2
@@ -44,9 +50,14 @@
   --border-mid: rgba(232,168,95,0.22);
   --border-hi:  rgba(232,168,95,0.40);
 
-  --font-serif: 'Cormorant Garamond', Georgia, serif;
-  --font-body:  'DM Sans', sans-serif;
-  --font-mono:  'DM Mono', monospace;
+  /* ── FONTES DO SISTEMA (sem Google Fonts — zero latência) ─────────────────
+     Serif: Palatino/Georgia → universal, humanista, respira como Cormorant
+     Sans:  -apple-system stack → nativa em cada SO, sem download
+     Mono:  SF Mono/Consolas → monospace universal
+  ─────────────────────────────────────────────────────────────────────────── */
+  --font-serif: Palatino, 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --font-body:  -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:  'SF Mono', Consolas, 'Liberation Mono', Menlo, 'Courier New', monospace;
 
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -366,7 +377,24 @@ body::after {
 .ac-dur { font-family: var(--font-mono); font-size: 10px; color: var(--text-low); }
 .ac-sit { font-size: 12px; color: var(--text-mid); }
 
-/* ── PLAYER ── */
+/* ── PLAYER LOADING STATE (CORREÇÃO 3) ── */
+.p-loading {
+  display: none; align-items: center; justify-content: center;
+}
+.p-loading.active { display: flex; }
+.p-spinner {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid rgba(232,168,95,0.2);
+  border-top-color: var(--amber);
+  animation: spin 0.7s linear infinite;
+}
+.p-err {
+  font-family: var(--font-mono); font-size: 10px;
+  color: #C4846A; letter-spacing: 0.5px;
+  display: none; text-align: center; margin-top: 4px;
+}
+.p-err.active { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
 #player {
   position: fixed; bottom: 72px; left: 0; right: 0; z-index: 200;
   background: rgba(19,10,6,0.97);
@@ -751,6 +779,9 @@ body::after {
 <div id="player">
   <div class="p-title" id="pt">—</div>
   <div class="p-sit" id="ps">—</div>
+  <!-- Estado de loading (CORREÇÃO 3) -->
+  <div class="p-loading" id="p-loading"><div class="p-spinner"></div></div>
+  <div class="p-err" id="p-err">Áudio indisponível — verifique sua conexão</div>
   <div class="p-bar" id="pbar" onclick="seekA(event)">
     <div class="p-fill" id="pfill" style="width:0%"></div>
   </div>
@@ -819,12 +850,19 @@ body::after {
     vx: (Math.random() - 0.5) * 0.00012,
     vy: -Math.random() * 0.00015 - 0.00005,
     a: Math.random() * Math.PI * 2,
-    // warm amber or soft rose
-    hue: Math.random() > 0.6 ? 30 : 15, // amber vs warm orange
+    hue: Math.random() > 0.6 ? 30 : 15,
     alpha: Math.random() * 0.25 + 0.05,
   }));
 
+  /* CORREÇÃO 4 — pausa canvas quando em background, economiza bateria */
+  let paused = false;
+  document.addEventListener('visibilitychange', () => {
+    paused = document.hidden;
+    if (!paused) draw();
+  });
+
   function draw(){
+    if(paused) return;
     const W = c.width, H = c.height;
     ctx.clearRect(0,0,W,H);
     pts.forEach(p => {
@@ -960,8 +998,60 @@ const DAYS = [
 let curAudio = null, playing = false, aProgress = 0;
 let bInterval = null, bPhase = 0, bCycle = 0;
 let sosTimer = null;
-let completedDays = JSON.parse(localStorage.getItem('z5days') || '[]');
-let streak = parseInt(localStorage.getItem('z5streak') || '0');
+
+/* CORREÇÃO 5 — Streak real baseado em datas com timestamps ISO
+   Estrutura: completedDays = [{dayIndex:0, completedAt:"2024-01-15T20:30:00.000Z"}, ...]
+   Compatível com o formato antigo (array de números) via migração automática abaixo */
+let completedDays = [];
+(function migrateAndLoad(){
+  try {
+    const raw = localStorage.getItem('z5days');
+    if(!raw){ completedDays = []; return; }
+    const parsed = JSON.parse(raw);
+    if(!parsed.length){ completedDays = []; return; }
+    /* Migra formato antigo [0,1,2] → [{dayIndex,completedAt}] */
+    if(typeof parsed[0] === 'number'){
+      const today = new Date();
+      completedDays = parsed.map((idx, i) => ({
+        dayIndex: idx,
+        completedAt: new Date(today.getTime() - (parsed.length - 1 - i) * 86400000).toISOString()
+      }));
+      localStorage.setItem('z5days', JSON.stringify(completedDays));
+    } else {
+      completedDays = parsed;
+    }
+  } catch(e){ completedDays = []; }
+})();
+
+/* Calcula streak real: quantos dias *consecutivos* até hoje têm uma entrada */
+function calcStreak(){
+  if(!completedDays.length) return 0;
+  const today = new Date(); today.setHours(0,0,0,0);
+  /* Datas únicas de conclusão, normalizadas para meia-noite local */
+  const dates = [...new Set(
+    completedDays.map(d => {
+      const dt = new Date(d.completedAt); dt.setHours(0,0,0,0);
+      return dt.getTime();
+    })
+  )].sort((a,b) => b - a); /* mais recente primeiro */
+
+  if(!dates.length) return 0;
+  /* Usuário tem streak se completou hoje ou ontem */
+  const yesterday = today.getTime() - 86400000;
+  if(dates[0] !== today.getTime() && dates[0] !== yesterday) return 0;
+
+  let streak = 1;
+  for(let i = 1; i < dates.length; i++){
+    const diff = (dates[i-1] - dates[i]) / 86400000;
+    if(diff === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function isDayCompleted(idx){
+  return completedDays.some(d => d.dayIndex === idx);
+}
 
 /* ═══════════════════════════════
    INIT
@@ -991,10 +1081,19 @@ function goTo(id){
    STREAK
 ═══════════════════════════════ */
 function renderStreak(){
+  const streak = calcStreak();
   document.getElementById('sn').textContent = streak;
   const c = document.getElementById('sdots');
-  c.innerHTML = Array.from({length:7},(_,i) =>
-    `<div class="sd${i<streak?' on':''}"></div>`).join('');
+  /* Mostra os últimos 7 dias reais: verde = tem entrada naquele dia */
+  const today = new Date(); today.setHours(0,0,0,0);
+  const doneDates = new Set(
+    completedDays.map(d => { const dt = new Date(d.completedAt); dt.setHours(0,0,0,0); return dt.getTime(); })
+  );
+  c.innerHTML = Array.from({length:7}, (_,i) => {
+    const day = new Date(today.getTime() - (6-i) * 86400000);
+    const active = doneDates.has(day.getTime());
+    return `<div class="sd${active?' on':''}" title="${day.toLocaleDateString('pt-BR')}"></div>`;
+  }).join('');
 }
 
 /* ═══════════════════════════════
@@ -1024,6 +1123,26 @@ function renderAudios(){
 const audioEl = new Audio();
 audioEl.preload = 'metadata';
 
+/* CORREÇÃO 3 — helpers de estado visual do player */
+function setPlayerLoading(on){
+  document.getElementById('p-loading').classList.toggle('active', on);
+  document.getElementById('p-err').classList.remove('active');
+  const icon = document.getElementById('picon');
+  if(on) icon.innerHTML = '';
+}
+function setPlayerError(msg){
+  document.getElementById('p-loading').classList.remove('active');
+  document.getElementById('p-err').textContent = msg;
+  document.getElementById('p-err').classList.add('active');
+  playing = false;
+  document.getElementById('picon').innerHTML = '<polygon points="5,3 19,12 5,21"/>';
+}
+
+/* Buffering — mostra spinner enquanto aguarda dados da rede */
+audioEl.addEventListener('waiting',       () => setPlayerLoading(true));
+audioEl.addEventListener('canplay',       () => setPlayerLoading(false));
+audioEl.addEventListener('playing',       () => setPlayerLoading(false));
+
 audioEl.addEventListener('timeupdate', () => {
   if(!curAudio) return;
   aProgress = Math.floor(audioEl.currentTime);
@@ -1041,8 +1160,9 @@ audioEl.addEventListener('loadedmetadata', () => {
   curAudio.dur = m + ':' + (s < 10 ? '0' : '') + s;
   updatePlayer();
 });
-audioEl.addEventListener('error', (e) => {
-  console.warn('Erro ao carregar áudio:', audioEl.src, e);
+audioEl.addEventListener('error', () => {
+  setPlayerError('Áudio indisponível — verifique sua conexão');
+  renderAudios();
 });
 
 function playAudio(i){
@@ -1051,11 +1171,14 @@ function playAudio(i){
   audioEl.src = AUDIO_BASE_URL + a.file;
   audioEl.load();
   curAudio = a; aProgress = 0; playing = true;
-  audioEl.play().catch(err => {
-    console.warn('Autoplay bloqueado pelo navegador — aguarde interação do usuário:', err);
-    playing = false; updatePlayer(); renderAudios();
-  });
+  setPlayerLoading(true); /* feedback imediato ao clique */
   updatePlayer(); renderAudios();
+  audioEl.play().catch(err => {
+    console.warn('Autoplay bloqueado:', err);
+    playing = false;
+    setPlayerLoading(false);
+    updatePlayer(); renderAudios();
+  });
 }
 function updatePlayer(){
   if(!curAudio) return;
@@ -1133,7 +1256,7 @@ function toggleR(i){
 ═══════════════════════════════ */
 function renderDays(){
   document.getElementById('dlist').innerHTML = DAYS.map((d,i) => `
-    <div class="dc${completedDays.includes(i)?' done':''}" id="dc-${i}">
+    <div class="dc${isDayCompleted(i)?' done':''}" id="dc-${i}">
       <div class="dc-head" onclick="toggleD(${i})">
         <div>
           <div class="dc-day">Dia ${i+1}</div>
@@ -1141,7 +1264,7 @@ function renderDays(){
           <div class="dc-info">${d.tasks.length} tarefas · ${d.tasks.reduce((a,t)=>a+parseInt(t.d),0)} min</div>
         </div>
         <div class="dc-check">
-          ${completedDays.includes(i)
+          ${isDayCompleted(i)
             ? '<svg width="13" height="13" viewBox="0 0 24 24" style="stroke:var(--bg-deep);fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round"><polyline points="20,6 9,17 4,12"/></svg>'
             : ''}
         </div>
@@ -1153,19 +1276,18 @@ function renderDays(){
             <div class="dc-txt">${t.t}<span class="dc-dur">${t.d}</span></div>
           </div>`).join('')}
         <button onclick="markDay(${i})"
-          class="dc-btn ${completedDays.includes(i)?'done-btn':'todo'}">
-          ${completedDays.includes(i) ? 'Concluído ✓' : 'Marcar como concluído'}
+          class="dc-btn ${isDayCompleted(i)?'done-btn':'todo'}">
+          ${isDayCompleted(i) ? 'Concluído ✓' : 'Marcar como concluído'}
         </button>
       </div>
     </div>`).join('');
 }
 function toggleD(i){ document.getElementById('db-'+i).classList.toggle('open'); }
 function markDay(i){
-  if(completedDays.includes(i)) return;
-  completedDays.push(i);
-  streak = completedDays.length;
+  if(isDayCompleted(i)) return;
+  completedDays.push({ dayIndex: i, completedAt: new Date().toISOString() });
   localStorage.setItem('z5days', JSON.stringify(completedDays));
-  localStorage.setItem('z5streak', streak);
+  /* Legado removido — streak calculado dinamicamente por calcStreak() */
   renderDays(); renderStreak();
 }
 
@@ -1262,6 +1384,14 @@ function startSOS(){
       c=SOS_PHASES[pi].d; setPhase();
     }
   },1000);
+}
+/* CORREÇÃO 2 — Registro do Service Worker para PWA offline-first */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('ZEN5 SW registrado:', reg.scope))
+      .catch(err => console.warn('SW falhou:', err));
+  });
 }
 </script>
 </body>
